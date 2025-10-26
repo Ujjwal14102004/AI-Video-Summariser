@@ -1,7 +1,0 @@
-streamlit
-yt-dlp
-moviepy
-openai-whisper
-torch
-transformers
-sentencepiece
