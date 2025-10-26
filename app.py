@@ -1,6 +1,7 @@
 import streamlit as st
 from yt_dlp import YoutubeDL
 import os
+import re
 import requests
 from io import BytesIO
 
@@ -17,7 +18,6 @@ download_type = st.radio("Select type:", ["Video", "Audio"])
 formats_dict = {}
 thumbnail_url = None
 video_title = None
-file_size = None
 
 if url:
     # Fetch video info
@@ -33,15 +33,12 @@ if url:
                 if f.get('vcodec') != 'none':
                     height = f.get('height')
                     if height:
-                        # Save size in MB for later
                         filesize_bytes = f.get('filesize_approx') or 0
                         resolutions[height] = (f.get('format_id'), round(filesize_bytes / (1024*1024), 2))
 
-            # Sort resolutions descending
             available_resolutions = sorted(resolutions.keys(), reverse=True)
             formats_dict = {str(h): resolutions[h] for h in available_resolutions}
 
-# Show thumbnail
 # Show thumbnail
 if thumbnail_url:
     response = requests.get(thumbnail_url)
@@ -50,19 +47,27 @@ if thumbnail_url:
 # Select quality
 if download_type == "Video" and formats_dict:
     quality = st.selectbox("Select video quality:", list(formats_dict.keys()))
-    # Show approximate file size
     size_mb = formats_dict[quality][1]
     st.info(f"Approximate file size: {size_mb} MB")
 else:
     quality = None
 
-# Progress hook
+# Create a single progress bar placeholder
+progress_bar = st.progress(0)
+status_text = st.empty()  # Placeholder for text updates
+
 def progress_hook(d):
     if d['status'] == 'downloading':
-        percent = d.get('_percent_str', '0.0%').strip()
+        percent_str = d.get('_percent_str', '0.0%').strip()
+        # Remove ANSI color codes
+        percent_str = re.sub(r'\x1b\[[0-9;]*m', '', percent_str)
+        try:
+            percent = float(percent_str.replace('%',''))
+        except:
+            percent = 0
+        progress_bar.progress(percent / 100)
         speed = d.get('_speed_str', '')
-        st.progress(float(percent.replace('%','')))
-        st.write(f"Downloading: {percent} at {speed}")
+        status_text.text(f"Downloading: {percent_str} at {speed}")
 
 if st.button("Download"):
     if not url:
@@ -88,9 +93,7 @@ if st.button("Download"):
                 if quality is None:
                     st.warning("No video formats found.")
                     st.stop()
-
                 format_id = formats_dict[quality][0]
-
                 options = {
                     'format': format_id + '+bestaudio/best',
                     'outtmpl': 'downloads/%(title)s.%(ext)s',
